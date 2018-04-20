@@ -1,4 +1,5 @@
 import time
+import timeit
 import pandas as pd
 import numpy as np
 
@@ -19,26 +20,21 @@ class RecommerderSystemPython:
         self.usersSimilarity = None
 
     def LoadMovies(self):
-        startTime = time.time()
         path = self.sourceFiles + '/movies.csv'
         self.movies = pd.read_csv(path, ',', index_col=["movieId"])
-        print("LoadMovies: ", time.time() -startTime)
 
     def LoadUsersAndRatings(self):
-        startTime = time.time()
         path = self.sourceFiles + "/ratings.csv"
         self.ratings = pd.read_csv(path, ',', index_col=["userId", "movieId"], usecols=["userId", "movieId", "rating"])
         self.users = pd.DataFrame({"avgRatings": self.ratings.groupby("userId")["rating"].mean()}).reset_index().set_index("userId")
-        print("LoadUsersAndRatings: ", time.time() - startTime)
 
     def AppendUsersSimilarity(self, usersSimilarityAux):
         if (self.usersSimilarity is None):
             self.usersSimilarity = usersSimilarityAux
         else:
-            self.usersSimilarity.append(usersSimilarityAux)
+            self.usersSimilarity = pd.concat([self.usersSimilarity, usersSimilarityAux])
 
     def CalculateSimilarity(self):
-        startTime = time.time()
         for index, row in self.users.iterrows():
             movies = self.ratings.query("userId == @index").reset_index().set_index("movieId")
             ratingsUsers_x_User = pd.merge(self.ratings.query("userId != @index").reset_index().set_index("movieId")\
@@ -52,10 +48,8 @@ class RecommerderSystemPython:
             usersSimilarityAux["similarity"] = usersSimilarityAux["srxy"] / np.sqrt(usersSimilarityAux["srx_2"] * usersSimilarityAux["sry_2"])
             self.AppendUsersSimilarity(usersSimilarityAux.loc[:,["similarity"]].reset_index()\
             .rename(index=str, columns={"userId_y": "userId1", "userId_x": "userId2"}).set_index(["userId1", "userId2"]))
-        print("CalculateSimilarity: ", time.time() - startTime)
     
     def GetRecommendations(self, userId, recommendationsNum):
-        startTime = time.time()
         userAvgRatings = self.users.query("userId == @userId")["avgRatings"].unique()[0]
         mostSimilarUsers = self.usersSimilarity.query("userId1 == @userId").sort_values(by=["similarity"], ascending=False)
         moviesRatedByUser = self.ratings.query("userId == @userId").reset_index()["movieId"].unique()
@@ -71,11 +65,13 @@ class RecommerderSystemPython:
         predictions = pd.merge(self.movies, predictionsAux, left_index=True, right_index=True, how="inner")\
         .sort_values(by=["predictedRating"], ascending=False).loc[:,["title", "predictedRating"]]
         print(predictions.head(recommendationsNum))
-        print("GetRecommendations userId ", userId, ": ", time.time() - startTime)
 
-rsPython = RecommerderSystemPython("C:/Movielens/ml-latest-small/ml-latest-small")
-rsPython.LoadMovies()
-rsPython.LoadUsersAndRatings()
-rsPython.CalculateSimilarity()
-rsPython.GetRecommendations(1, 10)
+def GetRecommendationsForUserTest():
+    rsPython.GetRecommendations(1, 10)
+
+rsPython = RecommerderSystemPython("C:/Users/fwata/Google Drive/TCC/Desenvolvimento/Movielens/ml-latest-small/ml-latest-small")
+print("LoadMovies: ", timeit.timeit(stmt=rsPython.LoadMovies, number=1))
+print("LoadUsersAndRatings: ", timeit.timeit(stmt=rsPython.LoadUsersAndRatings, number=1))
+print("CalculateSimilarity: ", timeit.timeit(stmt=rsPython.CalculateSimilarity, number=1))
+print("GetRecommendations: ", timeit.timeit(stmt=GetRecommendationsForUserTest, number=1))
 rsPython.close()
